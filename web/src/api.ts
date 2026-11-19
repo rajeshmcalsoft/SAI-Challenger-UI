@@ -19,6 +19,12 @@ export interface RunSummary {
   strip: StripCell[];
 }
 
+export interface Mark { transition: "new" | "fixed" | "regressed" | "new_error" | null; flaky: boolean; ageRuns: number; ageSince: string; previous: Result | null }
+
+export interface GapNote { kind: "limitation" | "bug" | "temporary"; kindText: string; link: string; until: string; by: string; at: string; recorded: boolean; state: "ok" | "overdue" | "no_date" }
+
+export interface TestGap { pattern: string; reason: string; note: GapNote }
+
 export interface TestRow {
   key: string;
   module: string;
@@ -33,6 +39,10 @@ export interface TestRow {
   cleanupFailed: boolean;
   upstream: boolean;
   step?: string | null;
+  pos?: number | null;
+  scenario?: string | null;
+  mark?: Mark | null;
+  gap?: TestGap | null;
 }
 
 export type Entry =
@@ -53,6 +63,19 @@ export interface JobMeta {
   setId: string | null;
   setIndex: number;
   setSize: number;
+  retry: number;
+  attempt: number;
+  retryOf: string | null;
+}
+
+export interface GateRule { id: string; title: string; passed: boolean; actual: string; expected: string; keys: string[]; more: number }
+export interface Gate { passed: boolean; failed: number; total: number; note: string; rules: GateRule[] }
+export interface Cause { id: string; title: string; family: "target" | "setup"; familyTitle: string; kind: string; keys: string[]; counts: Partial<Record<Result, number>> }
+export interface Retries {
+  attempt: number;
+  allowed: number;
+  attempts: { attempt: number; jobId: string; runId: string | null; state: JobState; current: boolean }[];
+  tests: Record<string, { attempt: number; runId: string; result: Result }[]>;
 }
 
 export interface RunFull extends RunSummary {
@@ -65,6 +88,11 @@ export interface RunFull extends RunSummary {
   upstreamTests: number;
   since: { previous: string; previousStarted: string; text: string; changed: boolean } | null;
   groups: { result: Result; count: number; entries: Entry[] }[];
+  tests: TestRow[];
+  marks: { new: number; fixed: number; regressed: number; newError: number; flaky: number };
+  causes: Cause[];
+  gate: Gate;
+  retries: Retries | null;
 }
 
 export interface Detail {
@@ -76,6 +104,22 @@ export interface Detail {
   location: string | null;
   source: { n: number; text: string; hl: boolean }[];
   raw: string;
+}
+
+export interface TestPage extends Detail {
+  test: TestRow;
+  diff: { expected: string; actual: string } | null;
+  labels: [string, string][];
+  history: { rows: { runId: string; started: string; result: Result; seconds: number; message: string }[]; passed: number; counted: number };
+  targets: { target: string; runId: string | null; started: string | null; result: Result | null; seconds: number; message: string; gap: TestGap | null; current: boolean }[];
+  steps: (TestRow & { needs: string[]; stepName: string; happened: string | null })[] | null;
+  scenario: string | null;
+}
+
+export interface Charts {
+  dynamics: { runId: string; started: string; counts: Record<Result, number>; fixed: number; regressed: number; seconds: number; compared: boolean; current: boolean }[];
+  stability: { track: string; tag: string; stable: number; total: number }[];
+  durations: number[];
 }
 
 export interface Target {
@@ -94,6 +138,8 @@ export interface Target {
   lock: { path: string; exists: boolean; holder: { who: string; pid: number; since: string | null } | null; waiting: number };
   state: { kind: "ready" | "busy" | "yours" | "stopped" | "unknown"; text: string };
   latest: RunSummary | null;
+  gate: Gate | null;
+  trend: { id: string; started: string; counts: Record<Result, number> }[];
   runCount: number;
   blocked: string;
   uiJobs: { id: string; state: JobState }[];
@@ -112,6 +158,7 @@ export interface RunRequest {
   mld: Mld;
   repeat: number;
   notify: boolean;
+  retries: number;
 }
 
 export interface PlanTarget {
@@ -152,6 +199,9 @@ export interface JobSummary {
   setId: string | null;
   setIndex: number;
   setSize: number;
+  retry: number;
+  attempt: number;
+  retryOf: string | null;
   done: number;
   total: number;
   headline: string | null;
@@ -182,6 +232,7 @@ export interface MatrixCell {
 }
 
 export interface Matrix {
+  byTrack: { track: string; tag: string; targets: Record<string, Record<Result, number>> }[];
   columns: { id: string; target: string; started: string }[];
   rows: {
     key: string;
@@ -214,6 +265,7 @@ export interface Gaps {
     pattern: string;
     scope: boolean;
     reasons: Record<string, string>;
+    notes: Record<string, GapNote>;
     status: Record<string, { code: string; text: string }>;
     returned: Record<string, string>;
     evidence: Record<string, string>;
@@ -266,6 +318,8 @@ async function send<T>(method: "POST" | "DELETE", path: string, body?: unknown):
 
 export const planRun = (req: RunRequest) => send<{ targets: PlanTarget[]; repeat: number }>("POST", "/api/plan", req);
 export const startRun = (req: RunRequest) => send<{ jobs: string[]; skipped: { target: string; why: string }[] }>("POST", "/api/jobs", req);
+export const saveGapNote = (note: { target: string; pattern: string; kind: string; link: string; until: string }) =>
+  send<GapNote>("POST", "/api/gaps/note", note);
 export const removeJob = (id: string) => send<{ removed: string }>("DELETE", `/api/jobs/${encodeURIComponent(id)}`);
 
 export async function getConsole(id: string, offset: number) {
@@ -295,8 +349,16 @@ export const useRuns = (target: string, attention: boolean, limit: number) =>
 
 export const useRun = (id: string) => useQuery({ queryKey: ["run", id], queryFn: () => get<RunFull>(`/api/runs/${encodeURIComponent(id)}`) });
 
-export const useDetail = (runId: string, key: string, enabled: boolean) =>
-  useQuery({ queryKey: ["detail", runId, key], queryFn: () => get<Detail>(`/api/runs/${encodeURIComponent(runId)}/detail`, { key }), enabled });
+export const useTestPage = (runId: string, key: string | null, enabled = true) =>
+  useQuery({
+    queryKey: ["detail", runId, key],
+    queryFn: () => get<TestPage>(`/api/runs/${encodeURIComponent(runId)}/detail`, { key: key ?? "" }),
+    enabled: enabled && !!key,
+    placeholderData: (prev) => prev,
+  });
+
+export const useCharts = (runId: string, enabled = true) =>
+  useQuery({ queryKey: ["charts", runId], queryFn: () => get<Charts>(`/api/runs/${encodeURIComponent(runId)}/charts`), enabled });
 
 export const useMatrix = () => useQuery({ queryKey: ["matrix"], queryFn: () => get<Matrix>("/api/compare/matrix") });
 export const useDiff = () => useQuery({ queryKey: ["diff"], queryFn: () => get<Diff>("/api/compare/diff") });
@@ -311,7 +373,7 @@ export const useHistory = (t: { module: string; cls: string | null; name: string
   });
 
 export const useHealth = () =>
-  useQuery({ queryKey: ["health"], queryFn: () => get<{ canRun: boolean; user: string; mode: string }>("/api/health"), staleTime: 60000 });
+  useQuery({ queryKey: ["health"], queryFn: () => get<{ canRun: boolean; user: string; mode: string; scRoot: string }>("/api/health"), staleTime: 60000 });
 
 export const useJobs = () =>
   useQuery({

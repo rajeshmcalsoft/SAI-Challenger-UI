@@ -40,11 +40,48 @@ def what_happened(result, message, detail=""):
     return None
 
 
+_E_LINE = re.compile(r"^E\s{1,12}(.*)$")
+_ASSERT_EQ = re.compile(r"assert '((?:[^'\\]|\\.)*)' == '((?:[^'\\]|\\.)*)'")
+_RETURNS_EXPECTED = re.compile(r"returns? (?:SAI_STATUS_)?([A-Z][A-Z_]{3,}),? expected (?:SAI_STATUS_)?([A-Z][A-Z_]{3,})")
+
+
+def expected_actual(message, detail=""):
+    """(expected, actual) when the text says both, for the diff viewer; else None.
+
+    pytest writes an == assertion as "assert actual == expected" and, below it, a diff where "- " lines are the
+    expected value and "+ " lines the actual one. Gap reasons say "returns X, expected Y"."""
+    e_lines = [m.group(1) for m in map(_E_LINE.match, detail.splitlines()) if m]
+    lines = e_lines or detail.splitlines()
+    starts = [i for i, line in enumerate(lines) if "assert " in line and " == " in line]
+    if not starts and "assert " in message and " == " in message:
+        starts = [-1]  # the assertion is in the message; the diff lines follow in the detail
+    for i in starts:
+        minus, plus = [], []
+        for follow in lines[i + 1:]:
+            text = follow.strip()
+            if text.startswith("- "):
+                minus.append(text[2:])
+            elif text.startswith("+ "):
+                plus.append(text[2:])
+            elif text and not text.startswith(("?", "Full diff", "At index", "Use -v", "Omitting", "...")) and (minus or plus):
+                break
+        if minus and plus:
+            return "\n".join(minus), "\n".join(plus)
+    eq = _ASSERT_EQ.search(message)
+    if eq and "..." not in eq.group(0):
+        return eq.group(2), eq.group(1)
+    ret = _RETURNS_EXPECTED.search(message)
+    if ret:
+        return "SAI_STATUS_" + ret.group(2), "SAI_STATUS_" + ret.group(1)
+    return None
+
+
 @dataclass
 class Hint:
     id: str
     text: str
     action: str
+    title: str = ""  # a few words, used as the cause name on the Causes tab
 
 
 class Hints:
@@ -53,7 +90,8 @@ class Hints:
         with open(path, "rb") as f:
             entries = tomllib.load(f).get("hint", [])
         self.entries = [
-            (re.compile(e["pattern"]), {Result(r) for r in e["results"]}, Hint(e["id"], e["text"], e.get("action", "")))
+            (re.compile(e["pattern"]), {Result(r) for r in e["results"]},
+             Hint(e["id"], e["text"], e.get("action", ""), e.get("title", "")))
             for e in entries
         ]
 

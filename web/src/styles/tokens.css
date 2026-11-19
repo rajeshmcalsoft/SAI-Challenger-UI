@@ -1,76 +1,131 @@
-/* SAI Conformance UI design tokens (design doc §8).
-   Dark is the default whatever the system says (Q2); light is fully designed and one click away.
-   Colour is used only for results, and every result colour is at least AA against --surface.
-   The React app imports this file as-is. */
+/* SAI Conformance UI design tokens, after Allure Report 3 (see ~/objects/SAI_Conformance_UI_Allure_Inspiration.md).
+   Dark is the default (Q2); light is one click away. The palette, type scale, spacing, radii and shadows follow
+   Allure's; the result colours map our vocabulary onto Allure's statuses (decision E5):
+     Pass green · Fail red · Setup/Cleanup error yellow (Allure "broken") · Expected gap sky (Allure "info") ·
+     Gap now passes violet · Skipped slate.
+   Each result has a fill (icons, pills, chart marks), a text colour (words on the surface), a tint (blocks) and an
+   on-fill colour (text on the fill). Stacked marks go pass, expected gap, gap now passes, error, fail, skipped:
+   the order the palette validator passed. */
+
+@font-face {
+  font-family: "PT Root UI";
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("../fonts/pt-root-ui_vf.woff2") format("woff2-variations"), url("../fonts/pt-root-ui_vf.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("../fonts/JetBrainsMono_vf.woff2") format("woff2-variations"), url("../fonts/JetBrainsMono_vf.woff2") format("woff2");
+}
 
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0e1318;            /* near-black blue-grey, not pure black */
-  --surface: #141a21;
-  --surface-raised: #1a222b; /* rows on hover, open rows, floating panels */
-  --line: #253039;
-  --line-strong: #33404c;
-  --text: #e4e8ec;          /* off-white */
-  --text-muted: #9ba6b2;
-  --text-faint: #6f7b87;
-  --ink: #8ab4f8;           /* the one accent: links, buttons, focus */
-  --ink-hover: #a8c7fa;
-  --ink-on: #0e1318;        /* text on an ink button */
-  --r-pass: #4cc38a;
-  --r-fail: #f2555a;
-  --r-error: #f4f6f8;       /* white: an error is not a verdict on the target (orange sat too close to amber) */
-  --r-gap: #d6b13d;         /* amber/ochre */
-  --r-gap-passes: #b48cff;  /* violet: "act on this" */
-  --r-skipped: #7f8a96;
-  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --canvas: #2c343f;          /* page: lighter than the cards, so cards sit in it without heavy shadows */
+  --surface: #1b2129;         /* cards */
+  --raised: #242a34;          /* menus, popovers, tooltips */
+  --sunken: #151a21;          /* code, console, inputs */
+  --text: rgba(246, 250, 254, 0.96);
+  --text-2: rgba(236, 244, 253, 0.82);
+  --text-3: rgba(222, 236, 252, 0.65);
+  --line: rgba(175, 197, 243, 0.12);
+  --line-2: rgba(189, 212, 255, 0.21);
+  --line-3: rgba(189, 212, 255, 0.32);
+  --control: rgba(174, 202, 244, 0.13);
+  --control-hover: rgba(174, 202, 244, 0.2);
+  --row-hover: rgba(158, 191, 240, 0.07);
+  --row-selected: rgba(175, 197, 243, 0.12);
+  --accent: #7855d0;          /* primary buttons */
+  --accent-hover: #6a48c2;
+  --accent-text: #c5b7ff;     /* active tab, selected row edge, active nav */
+  --accent-bg: rgba(135, 100, 224, 0.16);
+  --on-accent: #ffffff;
+  --link: #b2ccff;
+  --focus: #84adff;
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.22);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --grid: rgba(189, 212, 255, 0.14);
+
+  --pass: #49cb68;       --pass-text: #8ef2a0;       --pass-tint: rgba(73, 203, 104, 0.16);    --pass-on: #0d121c;
+  --fail: #ff574f;       --fail-text: #ffaca5;       --fail-tint: rgba(244, 63, 59, 0.2);      --fail-on: #ffffff;
+  --error: #ffe04a;      --error-text: #fff5b3;      --error-tint: rgba(255, 224, 74, 0.14);   --error-on: #0d121c;
+  --gap: #358ccf;        --gap-text: #9bd0ff;        --gap-tint: rgba(53, 140, 207, 0.2);      --gap-on: #ffffff;
+  --gappass: #873ba4;    --gappass-text: #efbcff;    --gappass-tint: rgba(135, 59, 164, 0.24); --gappass-on: #ffffff;
+  --skip: #5d6876;       --skip-text: #c3cbd4;       --skip-tint: rgba(93, 104, 118, 0.3);     --skip-on: #f6fafe;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f5f6f8;
+  --canvas: #f1f5f7;
   --surface: #ffffff;
-  --surface-raised: #f0f2f5;
-  --line: #dde2e7;
-  --line-strong: #c7ced6;
-  --text: #182028;
-  --text-muted: #55606b;
-  --text-faint: #7b8590;
-  --ink: #1d5fc4;
-  --ink-hover: #174d9f;
-  --ink-on: #ffffff;
-  --r-pass: #17804a;
-  --r-fail: #c62828;
-  --r-error: #1b2229;       /* near-black: the light-theme counterpart of white */
-  --r-gap: #866800;
-  --r-gap-passes: #6d44c7;
-  --r-skipped: #65707b;
-  --shadow-float: 0 8px 24px rgba(16, 24, 32, 0.14);
+  --raised: #ffffff;
+  --sunken: #f5f8fa;
+  --text: rgba(1, 10, 24, 0.83);
+  --text-2: rgba(1, 18, 40, 0.68);
+  --text-3: rgba(2, 19, 44, 0.6);
+  --line: rgba(29, 79, 129, 0.08);
+  --line-2: rgba(11, 48, 86, 0.16);
+  --line-3: rgba(11, 48, 86, 0.26);
+  --control: rgba(26, 76, 117, 0.08);
+  --control-hover: rgba(26, 76, 117, 0.14);
+  --row-hover: rgba(22, 88, 121, 0.06);
+  --row-selected: rgba(26, 76, 117, 0.1);
+  --accent: #7855d0;
+  --accent-hover: #6a48c2;
+  --accent-text: #7e22ce;
+  --accent-bg: rgba(161, 129, 255, 0.16);
+  --on-accent: #ffffff;
+  --link: #2f5fc5;
+  --focus: #84adff;
+  --shadow-sm: 0 2px 10px rgba(48, 57, 64, 0.08);
+  --shadow-md: 0 8px 24px rgba(48, 57, 64, 0.14);
+  --grid: rgba(11, 48, 86, 0.1);
+
+  --pass: #3bc95d;       --pass-text: #15803d;       --pass-tint: rgba(59, 201, 93, 0.12);     --pass-on: #0d121c;
+  --fail: #f43f3b;       --fail-text: #dc2626;       --fail-tint: rgba(255, 100, 100, 0.08);   --fail-on: #ffffff;
+  --error: #ffd833;      --error-text: #c2410c;      --error-tint: rgba(255, 216, 51, 0.16);   --error-on: #0d121c;
+  --gap: #54a8ed;        --gap-text: #0d71b2;        --gap-tint: rgba(84, 168, 237, 0.12);     --gap-on: #0d121c;
+  --gappass: #7c3aed;    --gappass-text: #6d28d9;    --gappass-tint: rgba(124, 58, 237, 0.1);  --gappass-on: #ffffff;
+  --skip: #a5b7d1;       --skip-text: #64748b;       --skip-tint: rgba(165, 183, 209, 0.2);    --skip-on: #0d121c;
 }
 
 :root {
-  /* IBM Plex is bundled with the app (vendor machines may be offline); system fonts are the fallback. */
-  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  --fs-body: 14px;
-  --fs-mono: 13px;
-  --fs-small: 12px;
-  --fs-headline: 24px;
-  --lh: 1.55;
-  /* Spacing scale: everything is spaced from this list, nothing ad hoc. */
+  --font-sans: "PT Root UI", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --fs-xs: 11px;
+  --fs-s: 12px;
+  --fs-code: 13px;
+  --fs-m: 14px;
+  --fs-l: 16px;
+  --fs-xl: 18px;
+  --fs-2xl: 24px;
+  /* An 8 px grid with half steps. */
+  --s-0: 2px;
   --s-1: 4px;
+  --s-1h: 6px;
   --s-2: 8px;
   --s-3: 12px;
   --s-4: 16px;
-  --s-5: 24px;
-  --s-6: 32px;
-  --s-7: 48px;
-  --s-8: 72px;
-  --row: 52px;
-  --radius: 4px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 40px;
+  --s-9: 48px;
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-pill: 999px;
+  --motion: 100ms;
+  --motion-color: 150ms;
+  --row: 36px;
+  --topbar: 52px;
+  /* result strip (Q4) */
   --strip-w: 6px;
   --strip-h: 14px;
   --strip-gap: 1px;
   --strip-track-gap: 4px;
-  --motion: 120ms;
 }

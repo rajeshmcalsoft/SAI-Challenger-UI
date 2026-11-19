@@ -59,6 +59,9 @@ class Job:
     set_size: int = 1
     notify: bool = False
     note: str = ""  # why a run ended without a report, or was taken off the queue
+    retry: int = 0  # "Retry failures": how many reruns of what fails are allowed
+    attempt: int = 1  # 1 for the run asked for, 2 for its first retry, ...
+    retry_of: str | None = None  # the job id of attempt 1
 
     @classmethod
     def from_dict(cls, data):
@@ -154,13 +157,16 @@ def alive(pid, script):
 
 
 class Runner:
-    def __init__(self, settings, profile_lock, store=None, on_change=None, lock_state=testbed.lock_state):
-        """profile_lock(target) -> lock name from the current profile. on_change() runs after a job changes state."""
+    def __init__(self, settings, profile_lock, store=None, on_change=None, lock_state=testbed.lock_state,
+                 on_finish=None):
+        """profile_lock(target) -> lock name from the current profile. on_change() runs after a job changes state.
+        on_finish(job) runs when a run this server watched ends (not for runs found ended after a restart)."""
         self.s = settings
         self.script = settings.sc_root / "scripts" / "poc" / "run_poc.sh"
         self.store = store or Store(settings.state_dir / "jobs")
         self.profile_lock = profile_lock
         self.on_change = on_change or (lambda: None)
+        self.on_finish = on_finish or (lambda job: None)
         self.lock_state = lock_state
         self.jobs = {}
         self._wake = None
@@ -347,6 +353,7 @@ class Runner:
     async def _watch(self, job, proc):
         rc = await proc.wait()
         self._finish(job, rc)
+        self._ended(job)
         self._kick()
 
     async def _watch_pid(self, job):
@@ -356,7 +363,14 @@ class Runner:
                 job.run_id = report_of(job.pid)
             await asyncio.sleep(2.0)
         self._finish(job, None)
+        self._ended(job)
         self._kick()
+
+    def _ended(self, job):
+        try:
+            self.on_finish(job)
+        except Exception as exc:  # noqa: BLE001 - a failing hook must not stop the queue
+            print(f"sai-challenger-ui: after-run step failed for {job.id}: {exc!r}", flush=True)
 
     def _finish(self, job, rc, note="", state="done"):
         text, _ = self.console_text(job)

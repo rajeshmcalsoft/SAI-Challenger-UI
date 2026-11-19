@@ -13,6 +13,7 @@ TRACK_MARKERS = ("l2", "l3", "acl", "counters")  # pytest -m, never free text
 MLD_MODES = ("auto", "on", "off")
 PRESETS = ("full", "tracks", "failures", "pick")
 MAX_REPEAT = 5
+MAX_RETRIES = 3
 RUN_POC = "scripts/poc/run_poc.sh"
 
 
@@ -30,6 +31,7 @@ class Request:
     mld: str = "auto"
     repeat: int = 1
     notify: bool = False
+    retries: int = 0  # rerun what fails (Fail, setup or cleanup error) up to this many times, only those tests
 
     @classmethod
     def from_json(cls, body):
@@ -51,12 +53,15 @@ class Request:
             raise BadRequest(f"mld must be one of {', '.join(MLD_MODES)}")
         if not isinstance(repeat, int) or isinstance(repeat, bool) or not 1 <= repeat <= MAX_REPEAT:
             raise BadRequest(f"repeat must be 1 to {MAX_REPEAT}")
+        retries = body.get("retries", 0)
+        if not isinstance(retries, int) or isinstance(retries, bool) or not 0 <= retries <= MAX_RETRIES:
+            raise BadRequest(f"retries must be 0 to {MAX_RETRIES}")
         tracks = strings("tracks")
         bad = [t for t in tracks if t not in TRACK_MARKERS]
         if bad:
             raise BadRequest(f"unknown track {bad[0]}")
         return cls(strings("targets"), what, tracks, strings("tests"), bool(body.get("traffic", True)), mld, repeat,
-                   bool(body.get("notify", False)))
+                   bool(body.get("notify", False)), retries)
 
 
 @dataclass
@@ -200,6 +205,18 @@ def _estimate(keys, durations):
         return None
     typical = sorted(known)[len(known) // 2]
     return sum(durations.get(k, typical) for k in keys) + 15.0  # container exec and session setup
+
+
+def known_keys(cat, keys):
+    """The keys the catalogue still knows (a test may have been renamed since the run)."""
+    out = []
+    for k in keys:
+        try:
+            _resolve(cat, [k])
+            out.append(k)
+        except BadRequest:
+            pass
+    return out
 
 
 def _failures(latest):

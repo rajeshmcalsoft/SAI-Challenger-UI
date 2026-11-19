@@ -5,7 +5,7 @@ Read-only towards SAI-Challenger: runs are started only by core.jobs.Runner, thr
 import threading
 import time
 
-from ..core import catalog, compare, console, explain, profiles, reports, selection, testbed
+from ..core import catalog, compare, console, explain, gapnotes, gates, history, profiles, reports, selection, testbed
 
 
 class AppState:
@@ -13,6 +13,7 @@ class AppState:
         self.s = settings
         self.hints = explain.Hints()
         self.lookup = compare.Lookup()
+        self.results = history.Results()
         self.index = reports.RunIndex(settings.reports_dir)
         self._lock = threading.RLock()
         self._profiles, self._profiles_sig = {}, None
@@ -67,6 +68,13 @@ class AppState:
                 catalog.merge_history(self._cat, runs)
                 self._cat_sig = sig
             return self._cat
+
+    def gate_rules(self):
+        """(rules, note): from the UI's gates.toml, else the defaults."""
+        return gates.load_rules(self.s.config_dir)
+
+    def gap_notes(self):
+        return gapnotes.load(self.s.config_dir)
 
     def latest(self):
         """{target: newest run that ran PoC tests, or None}, in reference column order."""

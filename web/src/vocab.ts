@@ -12,14 +12,26 @@ export const LABEL: Record<Result, string> = {
   skipped: "Skipped",
 };
 
+/** Short labels for filter chips and chart legends. */
+export const SHORT: Record<Result, string> = {
+  pass: "Pass",
+  fail: "Fail",
+  setup_error: "Error",
+  cleanup_error: "Cleanup",
+  gap_passes: "Gap passes",
+  expected_gap: "Gap",
+  skipped: "Skipped",
+};
+
+/** Text glyphs, for places where an icon can't go (tooltips, plain text). */
 export const GLYPH: Record<Result, string> = {
-  pass: "●",
-  fail: "■",
-  setup_error: "▲",
-  cleanup_error: "▲",
-  gap_passes: "◇",
+  pass: "✓",
+  fail: "✕",
+  setup_error: "!",
+  cleanup_error: "!",
+  gap_passes: "↑",
   expected_gap: "◆",
-  skipped: "○",
+  skipped: "–",
 };
 
 export const MEANING: Record<Result, string> = {
@@ -33,6 +45,17 @@ export const MEANING: Record<Result, string> = {
 };
 
 export const ATTENTION: Result[] = ["fail", "setup_error", "cleanup_error", "gap_passes"];
+
+/** Attention first: the Run page's groups and the status chips. */
+export const GROUP_ORDER: Result[] = ["fail", "setup_error", "cleanup_error", "gap_passes", "expected_gap", "skipped", "pass"];
+
+/** Stacked marks (donut, bars, pill bars): the order the palette validator passed for adjacent colours. */
+export const STACK: Result[] = ["pass", "expected_gap", "gap_passes", "setup_error", "cleanup_error", "fail", "skipped"];
+
+/** Worst first, for "the status of a group". */
+export const RANK: Record<Result, number> = {
+  pass: 0, expected_gap: 1, skipped: 2, cleanup_error: 3, gap_passes: 4, setup_error: 5, fail: 6,
+};
 
 export const GROUP_TITLE: Record<Result, string> = {
   fail: "Fail",
@@ -75,4 +98,24 @@ export const RESULT_HELP: Record<Result, string> = {
   pass: "The target did what the SAI spec says.",
 };
 
-export const LEGEND: Result[] = ["pass", "fail", "expected_gap", "gap_passes", "skipped", "setup_error"];
+export const LEGEND: Result[] = ["pass", "expected_gap", "gap_passes", "setup_error", "fail", "skipped"];
+
+export const TRANSITION: Record<string, string> = { new: "New", fixed: "Fixed", regressed: "Regressed", new_error: "New error" };
+
+export const KIND_HELP: Record<string, string> = {
+  limitation: "The target can't or won't do this. Not expected to change.",
+  bug: "A known bug in the target, tracked somewhere: add the link.",
+  temporary: "Expected to be fixed by a date. After it, the gap shows as overdue for review.",
+};
+
+/** Pass over tests that ran (Skipped left out): what the donut's centre shows (decision E8). */
+export function passRate(counts: Partial<Record<Result, number>>) {
+  const ran = (Object.keys(counts) as Result[]).filter((r) => r !== "skipped").reduce((n, r) => n + (counts[r] ?? 0), 0);
+  return { pass: counts.pass ?? 0, ran, pct: ran ? Math.round(((counts.pass ?? 0) / ran) * 100) : null };
+}
+
+export function worst(results: Result[]): Result | null {
+  let w: Result | null = null;
+  for (const r of results) if (w === null || RANK[r] > RANK[w]) w = r;
+  return w;
+}

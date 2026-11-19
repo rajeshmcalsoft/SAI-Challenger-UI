@@ -162,7 +162,7 @@ function RunSheet({ prefill, onClose }: { prefill: Prefill; onClose: () => void 
   const closeRef = useRef<HTMLButtonElement>(null);
   const [req, setReq] = useState<RunRequest>(() => ({
     targets: prefill.targets ?? [], what: prefill.what ?? "full", tracks: prefill.tracks ?? ["l2"],
-    tests: prefill.tests ?? [], traffic: true, mld: "auto", repeat: 1, notify: false,
+    tests: prefill.tests ?? [], traffic: true, mld: "auto", repeat: 1, notify: false, retries: 0,
   }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -234,7 +234,7 @@ function RunSheet({ prefill, onClose }: { prefill: Prefill; onClose: () => void 
       <form className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"
         onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <div className="sheet-head">
-          <h2 id="sheet-title">Run tests</h2>
+          <h2 id="sheet-title" style={{ fontSize: "var(--fs-xl)" }}>Run tests</h2>
           <Help label="About the run sheet" align="end">
             <p>Each target gets its own run of scripts/poc/run_poc.sh, queued on its own lock. Show command has the
               exact line, which works the same from a terminal in the checkout.</p>
@@ -242,7 +242,7 @@ function RunSheet({ prefill, onClose }: { prefill: Prefill; onClose: () => void 
               needs are added.</p>
           </Help>
           <span className="spacer" />
-          <button ref={closeRef} className="btn sm icon" type="button" aria-label="Close" onClick={onClose}>✕</button>
+          <button ref={closeRef} className="btn ghost icon" type="button" aria-label="Close" onClick={onClose}>✕</button>
         </div>
         <div className="sheet-body">
           <div className="field">
@@ -325,6 +325,16 @@ function RunSheet({ prefill, onClose }: { prefill: Prefill; onClose: () => void 
                 ))}
               </div>
               <div className="muted small">2× shows results are stable; traffic tests need 3× for the definition of done.</div>
+              <div className="chips" style={{ marginTop: "var(--s-3)" }}>
+                <span className="muted small" style={{ minWidth: 96 }}>Retry failures</span>
+                {[0, 1, 2, 3].map((n) => (
+                  <button key={n} type="button" className="chip" aria-pressed={req.retries === n} onClick={() => set({ retries: n })}>{n ? `${n}×` : "Off"}</button>
+                ))}
+              </div>
+              <div className="muted small">
+                After the run, only what failed (Fail, setup or cleanup error) runs again, up to this many times, as new runs.
+                Tests that pass on a retry are marked Retried: treat them as possibly unstable, not as fixed.
+              </div>
               <label className="toggle" style={{ marginTop: "var(--s-3)" }}>
                 <input type="checkbox" checked={req.notify} onChange={(e) => set({ notify: e.target.checked })} /> Notify me when done
               </label>

@@ -1,10 +1,11 @@
+// Targets (design §6.1, A8): one Allure-style summary card per target profile.
 import { Link } from "@tanstack/react-router";
 import { useHealth, useMemory, useTargets, type Target } from "../api";
+import { I } from "../icons";
 import { useRunSheet } from "../RunSheet";
-import { Dl, Failed, Glyph, Help, Loading, ReadOnlyNote, Strip, when } from "../ui";
-import { LABEL, LEGEND, MEANING } from "../vocab";
+import { Dl, Donut, Failed, Help, Loading, MiniBars, StatusIcon, StatusPill, Strip, Ticks, duration, whenLong } from "../ui";
+import { ATTENTION, LABEL, MEANING, worst, type Result } from "../vocab";
 
-const DOT: Record<Target["state"]["kind"], string> = { ready: "●", busy: "◐", yours: "◐", stopped: "○", unknown: "?" };
 const SOURCE = {
   profile: "from the profile",
   ui: "from the UI's target_facts.toml; the profile has no key for it yet",
@@ -36,113 +37,134 @@ function TargetDetails({ t }: { t: Target }) {
   );
 }
 
-function TargetRow({ t, canRun }: { t: Target; canRun: boolean }) {
-  const uiJobs = t.uiJobs ?? [];  // absent when an older server answers
+function runStatus(counts: Record<Result, number>): Result {
+  const bad = ATTENTION.find((r) => counts[r]);
+  if (bad) return worst(ATTENTION.filter((r) => counts[r])) ?? bad;
+  if (counts.expected_gap) return "expected_gap";
+  if (counts.pass) return "pass";
+  return "skipped";
+}
+
+function TargetCard({ t, canRun }: { t: Target; canRun: boolean }) {
+  const uiJobs = t.uiJobs ?? [];
   const busy = t.state.kind === "busy" || t.state.kind === "yours" || uiJobs.length > 0;
   const openSheet = useRunSheet();
   const live = uiJobs.find((j) => j.state === "running") ?? uiJobs[0];
+  const latest = t.latest;
+  const status = latest ? runStatus(latest.counts) : null;
+  const total = latest ? Object.values(latest.counts).reduce((a, b) => a + b, 0) : 0;
+  const statePill = (
+    <><span className="dot" />{t.state.text}</>
+  );
   return (
-    <div className="target has-help">
+    <div className="card tcard">
       <Help corner side="bottom" align="end" label={`Details of ${t.name}`} title={t.name}><TargetDetails t={t} /></Help>
-      <div className="who">
-        <div className="name-line">
-          <span className="name">{t.name}</span>
+      <div>
+        <div className="tkind">{kindLine(t)}</div>
+        <div className="name">
+          <h2>{latest ? <Link to="/runs/$runId" params={{ runId: latest.id }} search={{}}>{t.name}</Link> : t.name}</h2>
           {live
-            ? <Link className={`pill ${t.state.kind}`} to="/jobs/$jobId" params={{ jobId: live.id }}>{DOT[t.state.kind]} {t.state.text}</Link>
-            : <span className={`pill ${t.state.kind}`}>{DOT[t.state.kind]} {t.state.text}</span>}
+            ? <Link className={`state-pill ${t.state.kind}`} to="/jobs/$jobId" params={{ jobId: live.id }}>{statePill}</Link>
+            : <span className={`state-pill ${t.state.kind}`}>{statePill}</span>}
         </div>
-        <div className="kind">{kindLine(t)}</div>
-        <div className="identity mono">{t.testbed} · {t.container.name}</div>
-        {t.duplicates.length > 0 && <div className="warn">⚠ {t.duplicates.join(", ")} is listed twice in {t.name}.json</div>}
-        {t.error && <div className="warn">⚠ {t.error}</div>}
+        <div className="when">{latest ? whenLong(latest.started) : "Never run"}</div>
+        {latest && status && (
+          <div className="status">
+            <StatusPill r={status} label={status === "pass" ? "Pass" : status === "expected_gap" ? "Pass except gaps" : LABEL[status]} />
+            <span className="in">in {duration(latest.seconds)}</span>
+            <Link className="small" to="/runs/$runId" params={{ runId: latest.id }} search={{}}>{latest.headline}</Link>
+          </div>
+        )}
+        <div className="icons">
+          <span title="Tests in the last run"><I.tests />{total || "–"}</span>
+          <span title="Runs in the reports folder"><I.play />{t.runCount}</span>
+          <span title="Expected gaps in the profile"><I.diamond />{t.expectedGaps}</span>
+          <span title="Ports in the profile"><I.ports />{t.ports.length}</span>
+          {t.gate && (
+            <span title={t.gate.rules.filter((r) => !r.passed).map((r) => r.title).join("; ") || "Every rule passed"}>
+              <I.shield />{t.gate.passed ? "Gate passed" : `Gate: ${t.gate.failed} of ${t.gate.total} rules fail`}
+            </span>
+          )}
+        </div>
+        {t.duplicates.length > 0 && <div className="warn small" style={{ marginTop: 8 }}>⚠ {t.duplicates.join(", ")} is listed twice in {t.name}.json</div>}
+        {t.error && <div className="warn small" style={{ marginTop: 8 }}>⚠ {t.error}</div>}
       </div>
-      <div className="result">
-        {t.latest ? (
-          <>
-            <div className="line">
-              <Link className="headline" to="/runs/$runId" params={{ runId: t.latest.id }}>{t.latest.headline}</Link>
-              <span className="when">{when(t.latest.started)}</span>
-            </div>
-            <div><Strip cells={t.latest.strip} fit /></div>
-          </>
-        ) : <div className="muted">Never run</div>}
-      </div>
-      <div className="actions">
-        <button className="btn" type="button" disabled={!canRun || !!t.blocked}
+      <div className="side">{latest ? <Donut counts={latest.counts} size={96} /> : <Donut counts={{}} size={96} />}</div>
+      {latest && (
+        <div className="ticks">
+          <div className="stat"><span className="k">Total</span><span className="v">{total}</span></div>
+          <Ticks counts={latest.counts} />
+        </div>
+      )}
+      {latest && <div className="stripline"><Strip cells={latest.strip} fit /></div>}
+      {t.trend.length > 1 && (
+        <div className="trend">
+          <div><div className="faint xs" style={{ marginBottom: 4 }}>Last {t.trend.length} PoC runs</div><MiniBars runs={t.trend} /></div>
+        </div>
+      )}
+      <div className="bottom">
+        <span className="ident" title={`${t.testbed} · ${t.container.name}`}>{t.testbed} · {t.container.name}</span>
+        {latest && <Link className="btn ghost sm" to="/runs/$runId" params={{ runId: latest.id }} search={{ view: "charts" }}><I.chart />Charts</Link>}
+        <Link className="btn ghost sm" to="/runs" search={{}}><I.list />History</Link>
+        <button className="btn primary sm" type="button" disabled={!canRun || !!t.blocked}
           title={t.blocked || (!canRun ? "Runs can be started only in local mode" : busy ? "Busy: a run started now waits its turn" : "")}
-          onClick={() => openSheet({ targets: [t.name], what: "full" })}>{busy ? "Queue" : t.latest ? "Run" : "Run full suite"}</button>
-        <button className="btn icon" type="button" disabled aria-label={`More actions for ${t.name}`}>⋯</button>
+          onClick={() => openSheet({ targets: [t.name], what: "full" })}><I.play />{busy ? "Queue" : t.latest ? "Run" : "Run full suite"}</button>
       </div>
     </div>
   );
 }
 
 export function TargetsPage() {
-  return <><TargetsList /><Legend /></>;
-}
-
-function TargetsList() {
   const targets = useTargets();
   const health = useHealth();
   const memory = useMemory();
   const gb = (n: number) => (n / 2 ** 30).toFixed(1);
   return (
-    <section className="section">
+    <>
       <div className="page-head">
-        <h1>
-          Targets{" "}
-          <Help label="About the Targets page">
-            <p>One row per target profile in tests/poc/targets. The pill merges container, lock and run state into the
-              one that matters most: Container stopped, Busy (with who and since when), or Ready.</p>
-            <p>The result is the newest run that ran PoC tests; click it to open the run. The strip has one cell per
-              test in suite order, with a gap between tracks. The ? in each row's corner has the target's details.</p>
-          </Help>
-        </h1>
+        <h1>Targets</h1>
+        <Help label="About the Targets page">
+          <p>One card per target profile in tests/poc/targets. The pill merges container, lock and run state into the one that
+            matters most: Container stopped, Busy (with who and since when), or Ready.</p>
+          <p>The card shows the newest run that ran PoC tests: its result, the donut (Pass out of tests that ran), the result strip
+            (one cell per test in suite order) and the last runs as small bars. The ? in each card has the target's details.</p>
+        </Help>
+        <span className="spacer" />
         {memory.data && (
-          <span className={`chip-mem${memory.data.low ? " low" : ""}`}>
+          <span className={`memchip${memory.data.low ? " low" : ""}`}>
             VM: {gb(memory.data.available)} of {gb(memory.data.total)} GB free
-            {memory.data.low && " · Low memory: starting another container may fail"}{" "}
+            {memory.data.low && " · Low memory: starting another container may fail"}
             <Help label="About the memory figure" align="end">
-              <p>Free memory on this VM (MemAvailable in /proc/meminfo). With all three containers up, the project
-                measured a peak of 4.1 GB used. Below 1.5 GB free, starting another container may fail.</p>
+              <p>Free memory on this VM (MemAvailable in /proc/meminfo). With all three containers up, the project measured a peak of
+                4.1 GB used. Below 1.5 GB free, starting another container may fail.</p>
             </Help>
           </span>
         )}
       </div>
-      <ReadOnlyNote />
-      {targets.isPending && <Loading what="targets" />}
+      {targets.isPending && <div className="card"><Loading what="targets" /></div>}
       {targets.error && <Failed error={targets.error} />}
       {targets.data && (
-        <div className="list">
+        <>
           {targets.data.dockerError && (
-            <div className="add-row">Can't reach Docker. Is your user in the docker group? <code>docker ps</code> said: {targets.data.dockerError}</div>
+            <div className="banner warn" style={{ marginBottom: 16 }}>Can't reach Docker. Is your user in the docker group? <code>docker ps</code> said: {targets.data.dockerError}</div>
           )}
-          {targets.data.targets.map((t) => <TargetRow key={t.name} t={t} canRun={health.data?.canRun ?? false} />)}
-          <div className="add-row">+ <b>Add libSAI</b>: upload a libsai.so and test it against the SAI spec (Phase 3)</div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function Legend() {
-  return (
-    <section className="section">
-      <h2>Legend</h2>
-      <p className="section-note">The six results, their glyphs and colours. Shape carries the meaning as well as colour,
-        so the page still reads in greyscale. Errors are white (near-black in the light theme): an error is not a verdict
-        on the target.</p>
-      <div className="legend">
-        {LEGEND.map((r) => (
-          <div key={r} className="item">
-            <div className="top">
-              <Glyph r={r} /><b>{r === "setup_error" ? "Setup / Cleanup error" : LABEL[r]}</b><span className="spacer" />
-              <span className="strip" aria-hidden="true"><span className="cells"><span className={`cell ${r}`} /></span></span>
-            </div>
-            <div className="small muted">{MEANING[r]}</div>
+          <div className="tcards">
+            {targets.data.targets.map((t) => <TargetCard key={t.name} t={t} canRun={health.data?.canRun ?? false} />)}
+            <div className="card add-card"><I.plusCircle style={{ width: 22, height: 22 }} /><div><b>Add libSAI</b><div className="small">Upload a libsai.so and test it against the SAI spec (Phase 3)</div></div></div>
           </div>
-        ))}
+        </>
+      )}
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-title"><h2>Results and what they mean</h2></div>
+        <div className="row wrap" style={{ gap: 24 }}>
+          {(["pass", "expected_gap", "gap_passes", "setup_error", "fail", "skipped"] as Result[]).map((r) => (
+            <div key={r} className="row" style={{ gap: 8, alignItems: "flex-start", maxWidth: 260 }}>
+              <StatusIcon r={r} />
+              <div><b>{r === "setup_error" ? "Setup / Cleanup error" : LABEL[r]}</b><div className="small muted">{MEANING[r]}</div></div>
+            </div>
+          ))}
+        </div>
       </div>
-    </section>
+    </>
   );
 }

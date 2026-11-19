@@ -10,12 +10,12 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
 from .. import settings as settings_mod
-from ..core import compare, jobs, runview, selection, testbed
+from ..core import compare, exports, gapnotes, jobs, runview, selection, testbed
 from . import serialize
 from .state import AppState
 
@@ -32,8 +32,39 @@ def _host(value):
 
 def create_app(settings=None, dist=DEFAULT_DIST):
     state = AppState(settings or settings_mod.load())
+
+    def retry_failures(job):
+        """G5: after a watched run ends, queue a rerun of only what failed, while retries are left."""
+        if job.state != "done" or not job.run_id or job.attempt > job.retry:
+            return
+        state.invalidate_runs()
+        run = state.run(job.run_id)
+        if run is None:
+            return
+        failing = [t.key for t in run.tests if t.result in runview.ATTENTION and t.result.value != "gap_passes"
+                   and not t.upstream and t.name != "(collection)"]
+        keys = selection.known_keys(state.catalogue(), failing)
+        if not keys:
+            return
+        req = selection.Request(targets=[job.target], what="pick", tests=keys, traffic=job.traffic, mld=job.mld,
+                                notify=job.notify)
+        (p,) = state.plan(req)
+        if p.blocked:
+            job.note = f"Not retried: {p.blocked}"
+            runner.store.save(job)
+            return
+        commit, branch, dirty = jobs.git_state(state.s.sc_root)
+        retry = jobs.Job(
+            id=runner.new_id(p.target), target=p.target, lock=state.profiles()[p.target].lock, args=p.args,
+            command=p.command, what=f"Retry {job.attempt} of {job.retry}: {p.what}", expected=p.expected,
+            count=p.count, traffic=p.traffic, mld=p.mld, who=job.who, created=jobs.now_iso(), commit=commit,
+            branch=branch, dirty=dirty, notify=job.notify, retry=job.retry, attempt=job.attempt + 1,
+            retry_of=job.retry_of or job.id,
+        )
+        runner.submit([retry])
+
     runner = jobs.Runner(state.s, lambda name: state.profiles()[name].lock if name in state.profiles() else None,
-                         on_change=state.invalidate_runs)
+                         on_change=state.invalidate_runs, on_finish=retry_failures)
     state.runner = runner
 
     @asynccontextmanager
@@ -46,12 +77,12 @@ def create_app(settings=None, dist=DEFAULT_DIST):
                   lifespan=lifespan)
     app.state.ui = state
 
-    def guard(request):
+    def guard(request, runs=True):
         """Actions only from this machine's browser tab: a page on another site can't send this header without
         a CORS preflight, which the server never answers, and a DNS-rebound name fails the Host check."""
         if state.s.mode != "local":
             raise HTTPException(403, "Starting runs is only available in local mode")
-        if not runner.owner:
+        if runs and not runner.owner:
             raise HTTPException(409, "Another sai-challenger-ui server on this machine manages runs: start them there")
         if request.headers.get("x-sai-challenger-ui") != "1":
             raise HTTPException(403, "Missing X-SAI-Challenger-UI header")
@@ -120,8 +151,32 @@ def create_app(settings=None, dist=DEFAULT_DIST):
         t = next((x for x in r.tests if x.key == key), None)
         if t is None:
             raise HTTPException(404, f"no test {key} in {run_id}")
-        d = runview.detail(r, t, state.catalogue(), state.profiles().get(r.target), state.hints, state.s.poc_dir)
-        return serialize.detail(d)
+        return serialize.test_page(state, r, t)
+
+    @app.get("/api/runs/{run_id}/charts")
+    def run_charts(run_id: str):
+        return serialize.charts(state, run_or_404(run_id))
+
+    def export_model(run):
+        model = serialize.run_full(state, run)
+        pages = {t.key: serialize.test_page(state, run, t) for t in run.tests
+                 if not t.upstream and t.result.value in ("fail", "setup_error", "cleanup_error", "gap_passes")}
+        return model, pages
+
+    @app.get("/api/runs/{run_id}/summary.md")
+    def run_summary_md(run_id: str):
+        run = run_or_404(run_id)
+        model, pages = export_model(run)
+        return PlainTextResponse(exports.agent_markdown(model, pages),
+                                 headers={"Content-Disposition": f'inline; filename="{run.id}-summary.md"'})
+
+    @app.get("/api/runs/{run_id}/export.html")
+    def run_export_html(run_id: str, download: bool = False):
+        run = run_or_404(run_id)
+        model, pages = export_model(run)
+        html = exports.report_html(model, pages, serialize.charts(state, run), version=__version__)
+        disp = "attachment" if download else "inline"
+        return HTMLResponse(html, headers={"Content-Disposition": f'{disp}; filename="{run.id}-conformance.html"'})
 
     @app.get("/api/runs/{run_id}/report/{kind}")
     def report_file(run_id: str, kind: str):
@@ -141,7 +196,7 @@ def create_app(settings=None, dist=DEFAULT_DIST):
     @app.get("/api/compare/matrix")
     def matrix(runs: str | None = None):
         m = compare.build_matrix(pick(runs), state.profiles(), state.catalogue(), state.index)
-        return serialize.matrix(m)
+        return serialize.matrix(m, state.catalogue())
 
     @app.get("/api/compare/diff")
     def diff(a: str | None = None, b: str | None = None):
@@ -155,7 +210,27 @@ def create_app(settings=None, dist=DEFAULT_DIST):
     @app.get("/api/compare/gaps")
     def gaps():
         register = compare.gap_register(state.profiles(), state.latest(), state.catalogue().all_names())
-        return serialize.gaps(register)
+        return serialize.gaps(register, state.gap_notes())
+
+    @app.post("/api/gaps/note")
+    async def gap_note(request: Request):
+        """Kind, link and date of one expected gap. Written to the UI's own config folder, never to a profile."""
+        guard(request, runs=False)
+        if not request.headers.get("content-type", "").startswith("application/json"):
+            raise HTTPException(415, "Send JSON")
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(400, "expected a JSON object")
+        target, pattern = body.get("target"), body.get("pattern")
+        prof = state.profiles().get(target) if isinstance(target, str) else None
+        if prof is None or not isinstance(pattern, str) or pattern not in prof.expected_gaps:
+            raise HTTPException(404, "no such expected gap in that profile")
+        try:
+            note = gapnotes.save(state.s.config_dir, target, pattern, str(body.get("kind", "")),
+                                 str(body.get("link", "") or ""), str(body.get("until", "") or ""), state.s.user)
+        except gapnotes.BadNote as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return gapnotes.as_dict(note)
 
     @app.get("/api/tests")
     def tests():
@@ -207,7 +282,7 @@ def create_app(settings=None, dist=DEFAULT_DIST):
                     id=runner.new_id(p.target), target=p.target, lock=state.profiles()[p.target].lock, args=p.args,
                     command=p.command, what=p.what, expected=p.expected, count=p.count, traffic=p.traffic, mld=p.mld,
                     who=state.s.user, created=created, commit=commit, branch=branch, dirty=dirty,
-                    set_index=i + 1, set_size=req.repeat, notify=req.notify,
+                    set_index=i + 1, set_size=req.repeat, notify=req.notify, retry=req.retries,
                 )
                 set_id = set_id or (job.id if req.repeat > 1 else None)
                 job.set_id = set_id
