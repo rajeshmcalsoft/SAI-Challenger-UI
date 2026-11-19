@@ -6,6 +6,9 @@ A web UI for the SAI-Challenger PoC. It shows targets, runs, results and compari
 - `server/` is the Python API (FastAPI).
 - `web/` is the React front end (Vite, TypeScript).
 
+New to the project? Start with [How the SAI Conformance UI works](docs/HOW_THE_UI_WORKS.md): the background, the goal,
+how every part works, the project steps and why they were chosen, and answers to common questions.
+
 ## Requirements
 
 - Linux with Python 3.12 or newer
