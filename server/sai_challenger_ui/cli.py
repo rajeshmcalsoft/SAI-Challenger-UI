@@ -3,7 +3,7 @@ import argparse
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="sai-challenger-ui", description="SAI Conformance UI server (read-only in this version)")
+    ap = argparse.ArgumentParser(prog="sai-challenger-ui", description="SAI Conformance UI server: reads the SAI-Challenger reports and starts runs through run_poc.sh")
     ap.add_argument("--host", default="127.0.0.1", help="address to bind (default 127.0.0.1: this machine only)")
     ap.add_argument("--port", type=int, default=8765)
     args = ap.parse_args(argv)

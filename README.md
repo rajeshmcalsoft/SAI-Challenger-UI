@@ -25,6 +25,9 @@ cd SAI-Challenger-UI
 cd server
 python3 -m venv .venv
 .venv/bin/pip install -e ".[server,dev]"
+# No pip or ensurepip on the machine ("ensurepip is not available")? Use uv instead:
+#   uv venv --python /usr/bin/python3.12 .venv
+#   uv pip install --python .venv/bin/python -e ".[server,dev]"
 
 # Web app
 cd ../web
