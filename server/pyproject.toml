@@ -1,0 +1,30 @@
+[project]
+name = "sai-challenger-ui"
+version = "0.1.0"
+description = "SAI Conformance UI (working name): a web UI over scripts/poc/run_poc.sh"
+requires-python = ">=3.12"
+dependencies = []  # sai_challenger_ui.core uses the standard library only
+
+[project.scripts]
+sai-challenger-ui = "sai_challenger_ui.cli:main"
+
+[project.optional-dependencies]
+# server: the API; dev: tests. Install with: uv pip install --python .venv/bin/python -e ".[server,dev]"
+server = ["fastapi", "uvicorn[standard]"]
+dev = ["pytest", "httpx"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["sai_challenger_ui*"]
+
+[tool.setuptools.package-data]
+sai_challenger_ui = ["*.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120

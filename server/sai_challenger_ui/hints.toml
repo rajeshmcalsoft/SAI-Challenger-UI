@@ -1,0 +1,71 @@
+# Failure signature -> one-line hint and action (design doc §7).
+# The team adds entries as it learns, the way the work log fed the runbook.
+#
+#   pattern  Python regex, searched in the message and the detail text
+#   results  which results it applies to: fail, setup_error, cleanup_error, gap_passes, skipped
+#   action   button text; "" for none
+# The first matching entry wins, so put specific signatures before general ones.
+# (TOML rather than YAML: Python reads TOML without extra packages.)
+
+[[hint]]
+id = "mld-frame"
+pattern = 'received on device \d+, port \d+, but we expected no packets[\s\S]*?0000\s+33 33'
+results = ["fail"]
+text = "VPP's own MLD frame (to 33:33:…) arrived during the check. The MLD filter was probably off in this run."
+action = "Rerun with the MLD filter on"
+
+[[hint]]
+id = "poc-ports-factory"
+pattern = "'function' object is not subscriptable"
+results = ["setup_error", "fail"]
+text = "poc_ports is a factory: call poc_ports(n), not poc_ports[0]."
+action = "Open source"
+
+[[hint]]
+id = "gap-now-passes"
+pattern = '.'
+results = ["gap_passes"]
+text = "The target now passes this test. Remove the expected gap."
+action = "Remove gap"
+
+[[hint]]
+id = "left-over-objects"
+pattern = '(?i)create\w*\b.{0,120}ALREADY_EXISTS|ALREADY_EXISTS.{0,120}\bcreate'
+results = ["fail", "setup_error"]
+text = "Objects left over from an earlier run (missing cleanup, or a run was stopped)."
+action = "Restart the container (admin)"
+
+[[hint]]
+id = "profile-port-missing"
+pattern = 'profile port \d+ not on this switch'
+results = ["fail", "setup_error"]
+text = "The profile lists a port this switch doesn't have."
+action = "Edit ports"
+
+[[hint]]
+id = "too-few-ports"
+pattern = 'profile provides fewer than \d+ ports'
+results = ["skipped"]
+text = "Skipped because the profile has fewer ports than this test needs."
+action = "Edit ports"
+
+[[hint]]
+id = "syncd-stopped"
+pattern = '(?i)supervisor.{0,40}FATAL|syncd (exited|stopped|is not running)'
+results = ["fail", "setup_error", "cleanup_error"]
+text = "syncd stopped. The container needs a restart."
+action = "Restart the container (admin)"
+
+[[hint]]
+id = "needs-traffic"
+pattern = 'needs --traffic on a forwarding target|traffic mode is off'
+results = ["skipped"]
+text = "Traffic tests run only with traffic on, on a target that forwards packets."
+action = ""
+
+[[hint]]
+id = "step-needs"
+pattern = 'needs step\(s\) that did not pass'
+results = ["skipped"]
+text = "Skipped because an earlier step of this scenario did not pass."
+action = ""

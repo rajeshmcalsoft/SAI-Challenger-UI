@@ -1,0 +1,76 @@
+/* SAI Conformance UI design tokens (design doc §8).
+   Dark is the default whatever the system says (Q2); light is fully designed and one click away.
+   Colour is used only for results, and every result colour is at least AA against --surface.
+   The React app imports this file as-is. */
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1318;            /* near-black blue-grey, not pure black */
+  --surface: #141a21;
+  --surface-raised: #1a222b; /* rows on hover, open rows, floating panels */
+  --line: #253039;
+  --line-strong: #33404c;
+  --text: #e4e8ec;          /* off-white */
+  --text-muted: #9ba6b2;
+  --text-faint: #6f7b87;
+  --ink: #8ab4f8;           /* the one accent: links, buttons, focus */
+  --ink-hover: #a8c7fa;
+  --ink-on: #0e1318;        /* text on an ink button */
+  --r-pass: #4cc38a;
+  --r-fail: #f2555a;
+  --r-error: #f4f6f8;       /* white: an error is not a verdict on the target (orange sat too close to amber) */
+  --r-gap: #d6b13d;         /* amber/ochre */
+  --r-gap-passes: #b48cff;  /* violet: "act on this" */
+  --r-skipped: #7f8a96;
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-raised: #f0f2f5;
+  --line: #dde2e7;
+  --line-strong: #c7ced6;
+  --text: #182028;
+  --text-muted: #55606b;
+  --text-faint: #7b8590;
+  --ink: #1d5fc4;
+  --ink-hover: #174d9f;
+  --ink-on: #ffffff;
+  --r-pass: #17804a;
+  --r-fail: #c62828;
+  --r-error: #1b2229;       /* near-black: the light-theme counterpart of white */
+  --r-gap: #866800;
+  --r-gap-passes: #6d44c7;
+  --r-skipped: #65707b;
+  --shadow-float: 0 8px 24px rgba(16, 24, 32, 0.14);
+}
+
+:root {
+  /* IBM Plex is bundled with the app (vendor machines may be offline); system fonts are the fallback. */
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --fs-body: 14px;
+  --fs-mono: 13px;
+  --fs-small: 12px;
+  --fs-headline: 24px;
+  --lh: 1.55;
+  /* Spacing scale: everything is spaced from this list, nothing ad hoc. */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 72px;
+  --row: 52px;
+  --radius: 4px;
+  --strip-w: 6px;
+  --strip-h: 14px;
+  --strip-gap: 1px;
+  --strip-track-gap: 4px;
+  --motion: 120ms;
+}

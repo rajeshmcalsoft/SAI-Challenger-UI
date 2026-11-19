@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SAI Conformance</title>
+    <script>
+      // Apply the saved theme before first paint. Dark is the default (Q2).
+      try { if (localStorage.getItem("sai-challenger-ui-theme") === "light") document.documentElement.dataset.theme = "light"; } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

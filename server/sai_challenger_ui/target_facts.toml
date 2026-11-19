@@ -1,0 +1,13 @@
+# Target facts the profiles don't carry yet (design doc §13: "Forwards packets needs a home").
+# Today this lives only in the docs ("Level 2 only on saivpp"). When a "forwards_traffic" key is
+# agreed for tests/poc/targets/*.json, the profile value wins and this file can go.
+# Override per machine in ~/.config/sai-challenger-ui/target_facts.toml.
+
+[saivpp]
+forwards_traffic = true
+
+[saivs]
+forwards_traffic = false
+
+[saivs-thrift]
+forwards_traffic = false
